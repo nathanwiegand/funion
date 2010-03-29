@@ -1,0 +1,73 @@
+Need to provide a unioned view of 2+ directory trees.
+
+-------------------------------------------------------------------
+UNIONING:
+-------------------------------------------------------------------
+  Unioning should be done lazily.  Otherwise cycles from symbolic links would
+  prove killer.
+
+
+
+-------------------------------------------------------------------
+UNIONED VIEW
+-------------------------------------------------------------------
+  A directory in the FUSE system will correspond to 1+ directories.
+
+  /A/fileA1
+    /fileA2
+    /dir1
+      /fileA3
+
+  /B/fileB1
+    /dir1
+      /fileB2
+      /dir2/fileB3
+
+
+  /FUSE(A,B)/fileA1
+            /fileA2
+            /fileB1
+            /dir1/fileA3
+                 /fileB2
+                 /dir2/fileB3
+
+--------------------------------------------------------------------
+In the event that there are multiple files with the exact same name:
+--------------------------------------------------------------------
+  (1) Keep the name of the first file (in order of unioning) and then append
+      ".#" to each subsequent file with the same name.
+      e.g.
+          /A/file1
+          /B/file1
+          /C/file1
+          /FUSE(A,B,C)/file1
+                      /file1.2
+                      /file1.3
+
+  (2) Before applying the renaming scheme from (1), check an MD5/SHA1 of the
+      conflicting files to see if the files are in-fact identical.  If so, then only
+      place one copy in the unioned directory.  Might need to keep the checksums
+      cached.
+
+
+-------------------------------------------------------------------
+Read/Write/Edit
+-------------------------------------------------------------------
+Virtual files should inherit their read-permissions from their originating
+files.
+
+READ:
+  Reading should be done lazily.  Don't provide more than the user asks for.
+  Don't want to accidentally try to read an entire DVD ISO into memory just to
+  pass through to the next reader.
+
+EDIT:
+  If the permissions are correct, then editing should take place on the original
+  file.  
+
+WRITE:
+  Creating a new file should be optionally possible.  However, because of
+  ambiguity, a new file should have an explicit target:
+    ./funion --write-dir /dirs/A
+  The write dir should be one of the unioned dirs. 
+
