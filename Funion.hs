@@ -47,13 +47,13 @@ funionFSOps dir@(FSDirectory _ _ _) =
                 , fuseOpen        = funionOpen dir
                 , fuseRead        = funionRead dir
                 , fuseOpenDirectory = funionOpenDirectory dir
-                , fuseReadDirectory = funionReadDirectory dir
+--                , fuseReadDirectory = funionReadDirectory dir
                 , fuseGetFileSystemStats = funionGetFileSystemStats dir
                 }
 
 
 funionGetFileStat :: FSDirectory -> FilePath -> IO (Either Errno FileStat)
-funionGetFileStat fileTree@(FSDirectory _ _ _) "/" = do 
+funionGetFileStat fileTree@(FSDirectory _ _ _) _ = do 
     ctx <- getFuseContext
     return $ Right $ dirStat ctx
 
@@ -92,7 +92,7 @@ funionRead fileTree  path _ byteCount offset
 
 funionOpenDirectory :: FSDirectory -> FilePath -> IO Errno
 funionOpenDirectory fileTree "/" =  return eOK
-funionOpenDirectory fileTree _ = return eNOENT
+funionOpenDirectory fileTree _ = return eOK --eNOENT
 
 funionGetFileSystemStats :: FSDirectory->String -> IO (Either Errno FileSystemStats)
 funionGetFileSystemStats fileTree  str =
@@ -112,14 +112,16 @@ funionReadDirectory :: FSDirectory ->FilePath -> IO (Either Errno [(FilePath, Fi
     Have this generated from the assoc. list.
     Will need to make it work with sub-directories too.
 -}
-funionReadDirectory fileTree "/" = do
+
+
+funionReadDirectory fileTree dir = do
     ctx <- getFuseContext
     return $ Right $[ (".", dirStat ctx)
-                    ,("aDIR",dirStat' ctx),("..", dirStat ctx)] 
+                     ,("..", dirStat ctx)] 
                 ++  (map (\x-> ((fsEntryFileName $ dirStats x), dirStat ctx)) (dirDirs fileTree))
 --                ++  (map (\x-> (fsEntryFileName $ fileStats x, fileStat ctx)) (dirFiles fileTree))
 
-funionReadDirectory fileTree _ = return (Left (eNOENT))
+--funionReadDirectory fileTree _ = return (Left (eNOENT))
 
 {-
     The following two should be completely removed and replaced with

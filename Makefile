@@ -1,3 +1,5 @@
+MOUNTPOINT=union
+
 all:  funion
 
 funion: Funion.hs
@@ -5,11 +7,13 @@ funion: Funion.hs
 #	sudo sh -c "runhaskell Funion.hs ./here; ls -l here; fusermount -u here"
 
 run: funion
-	sudo sh -c "./funion -o allow_other  here/ +/dvds/ +/disk2/dvds/"
+	if [ ! -d $(MOUNTPOINT) ]; then mkdir $(MOUNTPOINT); fi
+	sudo sh -c "./funion -o allow_other  $(MOUNTPOINT)/ +/dvds/ +/disk2/dvds/"
 
 kill: 
-	sudo umount here; \
-	sudo killall -9 funion
+	sudo umount $(MOUNTPOINT); \
+	sudo killall -9 funion; \
+	rmdir $(MOUNTPOINT)
 	
 
 clean:
