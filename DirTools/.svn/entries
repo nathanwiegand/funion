@@ -1,0 +1,39 @@
+9
+
+dir
+0
+https://funion.googlecode.com/svn/trunk/DirTools
+https://funion.googlecode.com/svn
+add
+
+
+
+
+
+
+
+svn:special svn:externals svn:needs-lock
+
+DirTools.hs
+file
+
+
+
+add
+
+10803b5caea56a1154214d4d161a60ac
+
+
+
+has-props
+has-prop-mods
+
+
+
+
+
+
+copied
+https://funion.googlecode.com/svn/trunk/DirTools.hs
+3
+
