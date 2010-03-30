@@ -5,12 +5,15 @@ module DirTools.DirTools
   , FSDirectory (..)
   , FSEntryStatistics (..)
   , fileStats
+  , getSubTree
   )
 where
 
 import System.Directory
 import System.Time
+import System.FilePath.Posix
 import Data.List
+import Data.Maybe
 import Control.Monad
 
 {-
@@ -122,12 +125,25 @@ getStats path name = do
   , fsEntryPermissions = perm
   , fsEntryModificationTime = time
   }
- 
+
+
+
+getSubTree :: FilePath ->  FSDirectory ->  FSDirectory
+getSubTree path dir = if length pathParts > 0 then  getSubTree (joinPath $ tail pathParts) subtree else dir
+  where 
+    pathParts = splitDirectories path
+    subtree =  fromJust $ find (\x -> (head pathParts) == (fsEntryFileName $ dirStats x)) (dirDirs dir) 
+--    subtree = case find (\x -> (head pathParts) == (fsEntryFileName $ dirStats x)) (dirDirs dir) of
+ --                 Just x -> x
+  --                _      -> dir
+
+
 
 
 readDir :: FilePath -> String -> IO FSDirectory
 readDir path name = do
   --let uri = path ++ "/" ++ name
+  {- replace with joinPath -}
   let uri = if length name > 0 then path ++ "/" ++ name else path 
   perm <- getPermissions uri 
   time <- getModificationTime uri 
@@ -150,8 +166,11 @@ readDir path name = do
         dirtree
   
 
+
 main = do
-  dir <- readDir "/dvds" "tv"
-  dir' <- readDir "/disk2/dvds" "tv"
-  putStrLn $ prettyTree $ treeUnion "" [dir,dir']
+  dir <- readDir "/dvds" ""
+  dir' <- readDir "/disk2/dvds" ""
+  let dir2 = getSubTree "Torchwood/Season 1" dir
+--  putStrLn $ prettyTree dir2 -- $ treeUnion "" [dir,dir']
+  putStrLn $ prettyTree  $ treeUnion "" [dir,dir']
 
