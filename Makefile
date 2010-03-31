@@ -14,7 +14,10 @@ kill:
 	sudo umount $(MOUNTPOINT); \
 	sudo killall -9 funion; \
 	rmdir $(MOUNTPOINT)
+
+lint:
+	clear; hlint -c Funion.hs | head -n 20
 	
 
 clean:
-	rm funion Funion.hi Funion.o DirTools/DirTools.o DirTools/DirTools.hi
+	rm -f funion Funion.hi Funion.o DirTools/DirTools.o DirTools/DirTools.hi
