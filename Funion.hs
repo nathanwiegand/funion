@@ -11,7 +11,7 @@ import System.Directory
 import System.Fuse
 import System(getArgs)
 import System.Environment(withArgs)
-
+import Control.Monad
 import DirTools.DirTools
 import Data.Maybe
 import Data.List
@@ -34,11 +34,6 @@ How should I present SymLinks?
   Change it so that all arguments are assumed to be 'mine' unless somehow
   otherwise noted.  Possibly with "--" 
 
-* LAZY UNIONING
-  As it stands the directory views are unioned at time of program launch.  This
-  should be changed to be done lazily.  In fact, it should probably be done 
-  on-demand because of possile changes to the underlying file system.
-
 * LOOKUP
   Helper function which looks up the path in the existing file systems.  It should 
   return a struct that contains :
@@ -50,34 +45,113 @@ How should I present SymLinks?
   if it's a directory, it should also have a list of its children.
 -}
 
+
 data FunionFS = FunionFS {
-    funionEntryName     :: FilePath
-  , funionActualPath    :: FilePath
-  , funionVirtualPath   :: FilePath 
-  , funionFileStat      :: FileStat
-  }
+      funionEntryName     :: FilePath
+    , funionActualPath    :: FilePath
+    , funionVirtualPath   :: FilePath 
+    , funionFileStat      :: FileStat
+    , funionContents      :: [FunionFS]
+    }
+  deriving Show
 
-fileExists :: FilePath -> String -> IO Bool
-fileExists path name = doesFileExist $ path </>  name
 
-dirExists :: FilePath -> String -> IO Bool
+dirContents :: FilePath -> IO [FilePath]
+dirContents = fmap (filter (`notElem` [".",".."])) . getDirectoryContents 
+
+fileExists :: FilePath -> FilePath -> IO Bool
+fileExists path name = doesFileExist $ path </> name
+
+dirExists :: FilePath -> FilePath -> IO Bool
 dirExists path name = doesDirectoryExist $ path </> name
 
 
-{-
-funionReadUnderlyingDirectory :: FilePath -> IO (Maybe FunionFS)
-funionReadUnderlyingDirectory path = do
-  perm <- getPermissions path
-  time <- getModificationTime path
-  contents <- dirContents path
-  files <- filterM (fileExists path) contents
-   
+getFileStats, getDirStats :: FilePath-> FilePath -> IO FunionFS
+getFileStats path name = do
+  let uri = path </> name
+  status <- getFileStatus uri
+  return FunionFS {
+      funionEntryName   = name
+    , funionActualPath  = uri
+    , funionVirtualPath = ""
+    , funionFileStat    = FileStat { statEntryType = RegularFile
+        , statFileMode =  fileMode status
+        , statLinkCount = linkCount status
+        , statFileOwner = fileOwner status
+        , statFileGroup = fileGroup status
+        , statSpecialDeviceID = specialDeviceID status
+        , statFileSize = fileSize status
+        , statBlocks = 1
+        , statAccessTime = accessTime status
+        , statModificationTime = modificationTime status
+        , statStatusChangeTime = statusChangeTime status
+      }
+     , funionContents = []
+  }
 
-funionLookUp :: [FunionFS] -> FilePath -> IO (Maybe FunionFS)
-funionLookUp dirs path = do
-  let root = head $ splitDirectories path
-  let subdirs = 
+
+getDirStats  path name = do
+  let uri = path </> name
+  status <- getFileStatus uri
+  return FunionFS {
+      funionEntryName   = name
+    , funionActualPath  = uri
+    , funionVirtualPath = ""
+    , funionFileStat    = FileStat { statEntryType = Directory
+        , statFileMode =  fileMode status
+        , statLinkCount = linkCount status
+        , statFileOwner = fileOwner status
+        , statFileGroup = fileGroup status
+        , statSpecialDeviceID = specialDeviceID status
+        , statFileSize = fileSize status
+        , statBlocks = 1
+        , statAccessTime = accessTime status
+        , statModificationTime = modificationTime status
+        , statStatusChangeTime = statusChangeTime status
+ 
+      }
+     , funionContents = []
+  }
+
+readDir' :: FilePath -> IO (FunionFS)
+readDir' path = do
+  contents <- dirContents path
+  --files <- filterM (doesFileExist) $ map (uri++) contents
+  files <- filterM (fileExists path) contents
+  fileList <- mapM (getFileStats path) files
+  -- list of directories
+  dirs <- filterM (dirExists path) contents
+  dirList <- mapM (getDirStats path) dirs
+  
+  return $ FunionFS {
+      funionEntryName   = takeFileName path
+    , funionActualPath  = ""
+    , funionVirtualPath = path
+    , funionFileStat    = dirStat -- need to reflect time/permissions
+    , funionContents    = fileList ++ dirList
+  }
+ 
+
+
+{- TODO(Nathan)
+  Make it actually do unioning and also handle looking up a file
 -}
+funionLookUp :: [FilePath] -> FilePath -> IO (Maybe FunionFS) 
+funionLookUp dirsToUnion path = do
+  dirs  <- filterM (`dirExists` path) dirsToUnion
+  dirList <- mapM (readDir'.( </> path)) dirs
+
+  files <- filterM (`fileExists` path) dirsToUnion
+  fileStats <- mapM (`getFileStats` path) files
+
+  let contents = map funionContents dirList
+  return $ if length fileStats > 0 then Just $head fileStats else Just FunionFS {
+      funionEntryName   = takeFileName path
+    , funionActualPath  = ""
+    , funionVirtualPath = path
+    , funionFileStat    = dirStat
+    , funionContents    = concat contents
+  }
 
 
 main :: IO ()
@@ -86,12 +160,10 @@ main = do
   let args' = map tail $ filter (\(x:xs) -> if x == '+' then True else False) args
   let args2 = filter(\(x:xs) -> if x == '+' then False else True) args
   putStrLn $ show args'
-  dirs <- mapM (`readDir` "") $ args'
-  let tree = treeUnion "" dirs
-  withArgs args2 $ fuseMain (funionFSOps tree)  defaultExceptionHandler
+  withArgs args2 $ fuseMain (funionFSOps args')  defaultExceptionHandler
 
 
-funionFSOps :: FSDirectory -> FuseOperations HT
+funionFSOps :: [FilePath] -> FuseOperations HT
 funionFSOps dir = 
   defaultFuseOps{ fuseGetFileStat        = funionGetFileStat dir
                 , fuseOpen               = funionOpen dir
@@ -102,16 +174,14 @@ funionFSOps dir =
                 }
 
 
-funionGetFileStat :: FSDirectory -> FilePath -> IO (Either Errno FileStat)
-funionGetFileStat fileTree dir = do 
+funionGetFileStat :: [FilePath] -> FilePath -> IO (Either Errno FileStat)
+funionGetFileStat dirsToUnion (_:dir) = do 
     ctx <- getFuseContext
-    let (x:dir2) = dir
-    let subtree = getSubTree dir2 fileTree
-
-    return $ Right $ dirStat ctx
+    (Just file) <- funionLookUp dirsToUnion dir 
+    return $ Right $ funionFileStat file
 
 
-funionOpen :: FSDirectory -> FilePath -> OpenMode -> OpenFileFlags -> IO (Either Errno HT)
+funionOpen :: [FilePath] -> FilePath -> OpenMode -> OpenFileFlags -> IO (Either Errno HT)
 funionOpen tree path mode flags
     | (path == "/afile") || (path == "/afile1") ||  (path == "/afile2") || (path == "/afile3") = case mode of
                             ReadOnly -> return (Right ())
@@ -119,11 +189,13 @@ funionOpen tree path mode flags
     | otherwise       = return (Left eNOENT) 
 
 
-funionOpenDirectory :: FSDirectory -> FilePath -> IO Errno
-funionOpenDirectory fileTree _ = return eOK --eNOENT
+funionOpenDirectory :: [FilePath] -> FilePath -> IO Errno
+funionOpenDirectory dirsToUnion (_:path) = do -- return eOK --eNOENT
+  extantDirs <- filterM (`dirExists` path) dirsToUnion 
+  return $ if length extantDirs > 0 then eOK else eNOENT
 
 
-funionGetFileSystemStats :: FSDirectory->String -> IO (Either Errno FileSystemStats)
+funionGetFileSystemStats :: [FilePath]->String -> IO (Either Errno FileSystemStats)
 funionGetFileSystemStats fileTree  str =
   return $ Right $ FileSystemStats
     { fsStatBlockSize = 512
@@ -136,20 +208,13 @@ funionGetFileSystemStats fileTree  str =
     }
 
 
-funionReadDirectory :: FSDirectory ->FilePath -> IO (Either Errno [(FilePath, FileStat)])
-funionReadDirectory fileTree dir = do
+funionReadDirectory :: [FilePath] ->FilePath -> IO (Either Errno [(FilePath, FileStat)])
+funionReadDirectory dirsToUnion (_:dir) = do
     ctx <- getFuseContext
-    let (x:dir2) = dir
-    let subtree = getSubTree dir2 fileTree
-    return $ Right $[ (".", dirStat ctx)
-                     ,("..", dirStat ctx), ("test", fileStat ctx)] 
-                ++  (map (\x-> ((fsEntryFileName $ fileStats x), fileStat ctx)) (dirFiles subtree))
-                ++  (map (\x-> ((fsEntryFileName $ dirStats x), dirStat ctx)) (dirDirs subtree))
---                ++  (map (\x-> (fsEntryFileName $ fileStats x, fileStat ctx)) (dirFiles fileTree))
-
-
-
-
+    entry <- funionLookUp dirsToUnion dir
+    let contents = funionContents $ fromJust  entry
+    let dirContents = map (\x -> ((funionEntryName x) :: String , funionFileStat x)) contents
+    return $ Right $ [ (".", dirStat), ("..", dirStat)] ++ dirContents
 
 
 
@@ -164,7 +229,7 @@ myMessage = B.pack "Hello there world.  This is a test of the nathan broadcast s
 {- TODO(nathan)
     Look up the path in the assoc list to get the real path to the file.  Then, read that block from the file.
 -}
-funionRead  :: FSDirectory -> FilePath -> HT -> ByteCount -> FileOffset -> IO (Either Errno B.ByteString)
+funionRead  :: [FilePath] -> FilePath -> HT -> ByteCount -> FileOffset -> IO (Either Errno B.ByteString)
 funionRead fileTree  path _ byteCount offset 
     | path == "/afile" = return $ Right $ B.take (fromIntegral byteCount) $ B.drop (fromIntegral offset) myMessage
     | path == "/afile1" = return $ Right $ B.take (fromIntegral byteCount) $ B.drop (fromIntegral offset) myMessage
@@ -182,7 +247,7 @@ funionRead fileTree  path _ byteCount offset
 -}
 
 
-dirStat ctx = FileStat { statEntryType = Directory
+dirStat = FileStat { statEntryType = Directory
                        , statFileMode = foldr1 unionFileModes
                                           [ ownerReadMode
                                           , ownerExecuteMode
