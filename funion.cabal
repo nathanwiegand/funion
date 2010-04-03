@@ -1,0 +1,16 @@
+name:                funion
+version:             0.0.1
+synopsis:            <Project description>
+description:         A unioning file-system using HFuse
+category:            System
+license:             BSD3
+license-file:        LICENSE
+author:              Nathan Wiegand
+maintainer:          nathanwiegand@gmail.com
+build-depends:       base
+build-type:          Simple
+
+executable:          funion
+main-is:             Funion.hs
+ghc-options:         -threaded
+build-depends:       base >= 3, HFuse >= 0.2.1, bytestring >=0.9, haskell98, directory >= 1, unix >= 2.3, filepath >= 1.1

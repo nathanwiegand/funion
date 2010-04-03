@@ -12,6 +12,7 @@ import System(getArgs)
 import System.Environment(withArgs)
 import Control.Monad
 import Data.Maybe
+import Data.List (nubBy)
 import Data.ByteString.Char8 (pack)
 
 {-
@@ -29,6 +30,7 @@ How should I present SymLinks?
   otherwise noted.  Possibly with "--" 
 
 * There's currently no real error checking whatsoever.
+* Add funionWrite
 -}
 
 data FunionFS = FunionFS {
@@ -112,7 +114,7 @@ funionLookUp dirsToUnion path = do
           , funionActualPath  = ""
           , funionVirtualPath = path
           , funionFileStat    = dirStat
-          , funionContents    = concat contents
+          , funionContents    = nubBy (\x y -> (funionEntryName x) == (funionEntryName y))  $ concat contents
         }
 
 
