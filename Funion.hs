@@ -97,9 +97,6 @@ readDir uri = do
     , funionContents    = fileList ++ dirList
   }
 
-{- TODO(Nathan)
-  Make it actually do unioning and also handle looking up a file
--}
 funionLookUp :: [FilePath] -> FilePath -> IO (Maybe FunionFS)
 funionLookUp dirsToUnion path = do
   dirs  <- filterM (`dirExists` path) dirsToUnion
@@ -180,7 +177,6 @@ funionReadDirectory dirsToUnion (_:dir) = do
 funionRead  :: [FilePath] -> FilePath -> Fd -> ByteCount -> FileOffset -> IO (Either Errno B.ByteString)
 funionRead dirsToUnion (_:path) fd byteCount offset = do
   (Just file) <- funionLookUp dirsToUnion path
---  fd <- openFd (funionActualPath file) ReadOnly Nothing (defaultFileFlags)
   fdSeek fd AbsoluteSeek offset
   (bytes, num) <- fdRead fd  byteCount
   return $ Right $ pack bytes
