@@ -1,12 +1,13 @@
 name:                funion
 version:             0.0.1
-synopsis:            <Project description>
+synopsis:            A unioning file-system using HFuse 
 description:         A unioning file-system using HFuse
 category:            System
 license:             BSD3
 license-file:        LICENSE
 author:              Nathan Wiegand
 maintainer:          nathanwiegand@gmail.com
+homepage:            http://github.com/nathanwiegand/funion
 build-depends:       base
 build-type:          Simple
 
