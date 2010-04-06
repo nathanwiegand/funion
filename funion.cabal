@@ -14,4 +14,4 @@ build-type:          Simple
 executable:          funion
 main-is:             Funion.hs
 ghc-options:         -threaded
-build-depends:       base >= 3, HFuse >= 0.2.1, bytestring >=0.9, haskell98, directory >= 1, unix >= 2.3, filepath >= 1.1
+build-depends:       base >= 3 && <= 4, HFuse >= 0.2.1, bytestring >=0.9, haskell98, directory >= 1, unix >= 2.3, filepath >= 1.1
