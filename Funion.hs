@@ -6,6 +6,8 @@ import System.Posix.Files
 import System.FilePath.Posix
 import System.Posix.IO
 import System.Directory
+import System.Environment
+import System.Exit
 import System.Fuse
 import System.IO
 import System(getArgs)
@@ -14,6 +16,9 @@ import Control.Monad
 import Data.Maybe
 import Data.List (nubBy)
 import Data.ByteString.Char8 (pack)
+import System.Console.GetOpt
+
+version = "0.0.2"
 
 {-
 OPEN QUESTIONS:
@@ -25,12 +30,11 @@ How should I present SymLinks?
 -}
 
 {- TODO(nathan)
-* CHANGE ARGUMENTS TO PROGRAM 
-  Change it so that all arguments are assumed to be 'mine' unless somehow
-  otherwise noted.  Possibly with "--" 
-
 * There's currently no real error checking whatsoever.
 * Add funionWrite
+* Thread in logging
+* Can I delete "funionVirtualPath"?
+* need to add unit tests
 -}
 
 data FunionFS = FunionFS {
@@ -54,7 +58,7 @@ dirExists  path name = doesDirectoryExist $ path </> name
 
 getFileStats, getDirStats :: FilePath-> FilePath -> IO FunionFS
 getFileStats path name = getStats RegularFile (path </> name)
-getDirStats path name = getStats Directory (path </> name)
+getDirStats  path name = getStats Directory (path </> name)
 
 
 getStats :: EntryType -> FilePath -> IO FunionFS
@@ -83,11 +87,11 @@ getStats entrytype uri = do
 readDir :: FilePath -> IO (FunionFS)
 readDir uri = do
   contents <- dirContents uri
-  files <- filterM (fileExists uri) contents
+  files    <- filterM (fileExists uri) contents
   fileList <- mapM (getFileStats uri) files
   -- list of directories
-  dirs <- filterM (dirExists uri) contents
-  dirList <- mapM (getDirStats uri) dirs
+  dirs     <- filterM (dirExists uri) contents
+  dirList  <- mapM (getDirStats uri) dirs
 
   return FunionFS {
       funionEntryName   = takeFileName uri
@@ -99,19 +103,19 @@ readDir uri = do
 
 funionLookUp :: [FilePath] -> FilePath -> IO (Maybe FunionFS)
 funionLookUp dirsToUnion path = do
-  dirs  <- filterM (`dirExists` path) dirsToUnion
-  dirList <- mapM (readDir.(</> path)) dirs
-  files <- filterM (`fileExists` path) dirsToUnion
+  dirs      <- filterM (`dirExists` path) dirsToUnion
+  dirList   <- mapM (readDir.(</> path)) dirs
+  files     <- filterM (`fileExists` path) dirsToUnion
   fileStats <- mapM (`getFileStats` path) files
   let contents = map funionContents dirList
   case dirs of
-    []        -> if length fileStats > 0 then return $ Just $ head fileStats else return Nothing
-    otherwise -> return $ if length fileStats > 0 then Just $ head fileStats else Just FunionFS {
+    []        -> return $ if length fileStats > 0 then Just $ head fileStats else Nothing
+    otherwise -> return $ Just $ if length fileStats > 0 then head fileStats else FunionFS {
             funionEntryName   = takeFileName path
           , funionActualPath  = ""
           , funionVirtualPath = path
           , funionFileStat    = dirStat
-          , funionContents    = nubBy (\x y -> (funionEntryName x) == (funionEntryName y))  $ concat contents
+          , funionContents    = nubBy (\x y -> funionEntryName x == funionEntryName y)  $ concat contents
         }
 
 
@@ -129,8 +133,8 @@ funionFSOps dir =
 
 funionGetFileStat :: [FilePath] -> FilePath -> IO (Either Errno FileStat)
 funionGetFileStat dirsToUnion (_:dir) = do
-    (Just file) <- funionLookUp dirsToUnion dir
-    return $ Right $ funionFileStat file
+  Just file <- funionLookUp dirsToUnion dir
+  return $ Right $ funionFileStat file
 
 
 funionOpen :: [FilePath] -> FilePath -> OpenMode -> OpenFileFlags -> IO (Either Errno Fd)
@@ -138,8 +142,8 @@ funionOpen dirsToUnion (_:path) mode flags = do
   file <- funionLookUp dirsToUnion path
   case file of
     Just f -> do
-            fd <- openFd (funionActualPath f) ReadOnly Nothing defaultFileFlags
-            return (Right fd)
+      fd <- openFd (funionActualPath f) ReadOnly Nothing defaultFileFlags
+      return (Right fd)
     Nothing -> return (Left eNOENT)
 
 -- What if 'fd' is no good?  What will happen?
@@ -203,9 +207,51 @@ dirStat = FileStat { statEntryType = Directory
   }
 
 
+---------------------------------------------------------------------------------
+--  Parse arguments and main
+---------------------------------------------------------------------------------
+
+data Options = Options {optLog :: String}
+
+
+defaultOptions = Options { optLog = undefined }
+
+
+options :: [OptDescr (Options -> IO Options)]
+options =  
+  [ Option "V?" ["version"] (NoArg printVersion) "show version number"
+  , Option "l"  ["log"] (ReqArg (\ arg opt -> return opt {optLog = arg}) 
+                          "FILE") "write log to FILE"
+  , Option "h"  ["help"] (NoArg printHelp) "show help message"
+  ]
+
+
+printHelp :: Options -> IO (Options)
+printHelp _ = do
+  prg <- getProgName
+  hPutStrLn stderr (usageInfo prg options)
+  exitWith ExitSuccess
+
+
+printVersion :: Options -> IO  (Options)
+printVersion _ = do
+  hPutStrLn stderr $ "Version " ++ version
+  exitWith ExitSuccess
+
+
+validateDirs :: [String] -> IO (String, [String])
+validateDirs dirs 
+  | length dirs >= 3 = return (head dirs, tail dirs) 
+  | otherwise        = do hPutStrLn stderr "Wrong number of arguments"; exitWith $ ExitFailure 1
+
+
 main :: IO ()
 main = do
-  args <- getArgs
-  let args' = map tail $ filter (\(x:xs) ->  x == '+') args
-  let args2 = filter(\(x:xs) -> x /= '+') args
-  withArgs args2 $ fuseMain (funionFSOps args')  defaultExceptionHandler
+  (args, fuseargs) <- liftM (break (\x -> x == "--")) getArgs
+  let (actions, dirList, errors) = getOpt Permute options args
+
+  -- Currently ignoring.  Need to thread logging throughout
+  opts <- foldl (>>=) (return defaultOptions) actions
+  
+  (mp, dirs) <- validateDirs dirList 
+  withArgs (mp:fuseargs) $ fuseMain (funionFSOps dirs) defaultExceptionHandler
