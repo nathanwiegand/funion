@@ -51,6 +51,10 @@ Install Funion:
 Usage
 -----
 There are currently very few options:
-    funion MOUNTPOINT +DIR1 +DIR2 ...
+    funion [OPTIONS] MOUNTPOINT DIR1 DIR2 ...
 where MOUNTPOINT, DIR1, DIR2, ..., are paths.
+OPTIONS:
+  -h    
+  -?    print help
+  -V    print version
 
