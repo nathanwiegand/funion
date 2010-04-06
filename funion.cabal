@@ -1,5 +1,5 @@
 name:                funion
-version:             0.0.1
+version:             0.0.2
 synopsis:            A unioning file-system using HFuse 
 description:         A unioning file-system using HFuse
 category:            System
