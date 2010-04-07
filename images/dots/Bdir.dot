@@ -1,0 +1,18 @@
+digraph G
+{
+  B [shape=folder, label="B"];
+  fileB1 [shape=note, label="fileB1"];
+  Bdir1  [shape=folder, label="dir1"];
+  Bdir2  [shape=folder, label="dir2"];
+  fileB2 [shape=note, label="fileB2"];
+  fileB3 [shape=note, label="fileB3"];
+
+  "B" -> "fileB1";
+  "B" -> "Bdir1";
+  
+  "Bdir1" -> "fileB2";
+  "Bdir1" -> "Bdir2";
+
+  "Bdir2" -> "fileB3";
+  
+}

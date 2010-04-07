@@ -1,0 +1,15 @@
+digraph G
+{
+
+        A [shape=folder, label="A"];
+        fileA1 [shape=note, label="fileA1"]
+        fileA2 [shape=note, label="fileA2"]
+        Adir1  [shape=folder, label="dir1"]
+        fileA3 [shape=note, label="fileA3"]
+
+
+        "A" -> "fileA1";
+        "A" -> "fileA2";
+        "A" -> "Adir1";
+        "Adir1" -> "fileA3";
+}
