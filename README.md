@@ -36,7 +36,7 @@ unioned file-system is read only.
 
 Requirements
 ------------
-* Linix/Unix.
+* Linux/Unix.
 * [FUSE](http://fuse.sourceforge.net/)
 * [GHC](http://hackage.haskell.org/platform/) (Haskell platform recommended)
 
